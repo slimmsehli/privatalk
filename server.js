@@ -4,7 +4,7 @@
 // │   └── index.html
 // ├── server.js
 // └── package.json
-
+/*
 // --- server.js ---
 const express = require('express');
 const http = require('http');
@@ -44,4 +44,15 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 8080;
 //server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 //server.listen(PORT, '192.168.137.1' , () => console.log(`Server running on http://0.0.0.0:${PORT}`));
+server.listen(PORT, () => console.log(`Server running on http://0.0.0.0:${PORT}`));
+*/
+
+const express = require("express")
+const app = express();
+const port = process.env.port || 8080;
+
+app.get('/', (req, res) => {
+    //res.sendFile(path.join(__dirname, 'public/index.html'));
+    res.sendFile(path.join('/Public/index.html'));
+  });
 server.listen(PORT, () => console.log(`Server running on http://0.0.0.0:${PORT}`));

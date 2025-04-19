@@ -37,9 +37,9 @@ io.on('connection', socket => {
 
 //app.get('/room/:id', (req, res) => {
 app.get('/', (req, res) => {
-    //res.sendFile(path.join(__dirname, 'public/index.html'));
+    res.sendFile(path.join(__dirname, 'Public/index.html'));
     //res.sendFile(path.join('./public/index.html'));
-    res.sendFile("Public/index.html"); //path.join('/Public/index.html'));
+    //res.sendFile("Public/index.html"); //path.join('/Public/index.html'));
   });
 
 const PORT = process.env.PORT || 8080;

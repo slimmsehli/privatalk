@@ -37,10 +37,11 @@ io.on('connection', socket => {
 
 //app.get('/room/:id', (req, res) => {
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/index.html'));
+    //res.sendFile(path.join(__dirname, 'public/index.html'));
+    res.sendFile(path.join('public/index.html'));
   });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 //server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 //server.listen(PORT, '192.168.137.1' , () => console.log(`Server running on http://0.0.0.0:${PORT}`));
-server.listen(PORT, '0.0.0.0' , () => console.log(`Server running on http://0.0.0.0:${PORT}`));
+server.listen(PORT, () => console.log(`Server running on http://0.0.0.0:${PORT}`));

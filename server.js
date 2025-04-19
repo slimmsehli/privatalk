@@ -53,6 +53,6 @@ const port = process.env.port || 8080;
 
 app.get('/', (req, res) => {
     //res.sendFile(path.join(__dirname, 'public/index.html'));
-    res.sendFile(path.join('/Public/index.html'));
+    res.sendFile("Public/index.html"); //path.join('/Public/index.html'));
   });
 server.listen(PORT, () => console.log(`Server running on http://0.0.0.0:${PORT}`));

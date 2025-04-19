@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC Meeting</title>
+  <style>
+    video { width: 45%; margin: 5px; border: 1px solid #ccc; }
+    body { font-family: sans-serif; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>WebRTC Video Chat</h1>
+  <video id="localVideo" autoplay muted playsinline></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const roomID = location.pathname.split('/')[2] || 'default';
+
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    let localStream;
+    let peerConnection;
+    const config = {
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    };
+
+    socket.emit('join', roomID);
+
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        localVideo.srcObject = stream;
+        localStream = stream;
+      });
+
+    socket.on('user-joined', userId => {
+      createPeer(userId, true);
+    });
+
+    socket.on('signal', async ({ from, signal }) => {
+      if (!peerConnection) createPeer(from, false);
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
+
+      if (signal.type === 'offer') {
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit('signal', { to: from, signal: peerConnection.localDescription });
+      }
+    });
+
+    function createPeer(userId, isInitiator) {
+      peerConnection = new RTCPeerConnection(config);
+
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+      peerConnection.ontrack = ({ streams: [stream] }) => {
+        remoteVideo.srcObject = stream;
+      };
+
+      peerConnection.onicecandidate = e => {
+        if (e.candidate) return;
+        socket.emit('signal', { to: userId, signal: peerConnection.localDescription });
+      };
+
+      if (isInitiator) {
+        peerConnection.createOffer()
+          .then(offer => peerConnection.setLocalDescription(offer));
+      }
+    }
+
+    socket.on('user-left', () => {
+      if (remoteVideo.srcObject) {
+        remoteVideo.srcObject.getTracks().forEach(t => t.stop());
+        remoteVideo.srcObject = null;
+      }
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -5,51 +5,47 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+//const io = new Server(server);
 
 // Store participants for each room
 const rooms = {};
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+const io = require('socket.io')(server);
+
+let participants = {};
+
 io.on('connection', socket => {
-  let roomID;
+  console.log('a user connected', socket.id);
+  
+  // Add user to the room
+  socket.on('join', (roomID) => {
+    socket.join(roomID);
+    participants[socket.id] = roomID;
+    io.to(roomID).emit('user-joined', socket.id);
+    io.to(roomID).emit('update-participant-list', Object.keys(participants));
+  });
 
-  socket.on('join', (id) => {
-    roomID = id;
+  // Handle remote stream broadcast
+  socket.on('stream', (data) => {
+    io.to(data.roomID).emit('remote-stream', socket.id, data.stream);
+  });
 
-    // Add user to the room's participant list
-    if (!rooms[roomID]) {
-      rooms[roomID] = [];
-    }
-    rooms[roomID].push(socket.id);
+  // Handle signaling data (offer/answer)
+  socket.on('signal', (data) => {
+    socket.to(data.to).emit('signal', { from: socket.id, signal: data.signal });
+  });
 
-    // Notify other participants in the room that a new user joined
-    socket.to(roomID).emit('user-joined', socket.id);
-
-    // Send the current list of participants to the new user
-    socket.emit('participant-list', rooms[roomID]);
-
-    // Broadcast updated participant list to everyone
-    io.to(roomID).emit('update-participant-list', rooms[roomID]);
-
-    socket.on('signal', (payload) => {
-      io.to(payload.to).emit('signal', {
-        from: socket.id,
-        signal: payload.signal
-      });
-    });
-
-    // When a user disconnects, remove them from the participant list
-    socket.on('disconnect', () => {
-      if (rooms[roomID]) {
-        rooms[roomID] = rooms[roomID].filter(id => id !== socket.id);
-        io.to(roomID).emit('user-left', socket.id);
-        io.to(roomID).emit('update-participant-list', rooms[roomID]);
-      }
-    });
+  // Handle user disconnection
+  socket.on('disconnect', () => {
+    const roomID = participants[socket.id];
+    delete participants[socket.id];
+    io.to(roomID).emit('user-left', socket.id);
+    io.to(roomID).emit('update-participant-list', Object.keys(participants));
   });
 });
+
 
 //app.get('/room/:id', (req, res) => {
 app.get('/', (req, res) => {

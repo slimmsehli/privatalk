@@ -64,29 +64,31 @@
     const roomID = location.pathname.split('/')[2] || 'default';
     const videoContainer = document.getElementById('videoContainer');
     const participantsDiv = document.getElementById('participants');
-
+  
     let localStream;
     let peerConnections = {}; // Store peer connections for all participants
     const config = {
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     };
-
+  
     // When joining a room
     socket.emit('join', roomID);
-
+  
     // Handle local media stream
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
         localStream = stream;
         addVideoElement('local', stream);  // Add local video element
+        // Broadcast the local stream to other participants
+        socket.emit('stream', { roomID, stream: stream });
       });
-
+  
     // Handle new participant joining
     socket.on('user-joined', userId => {
       console.log(`User ${userId} joined`);
       createPeer(userId, true);
     });
-
+  
     // Handle new participant leaving
     socket.on('user-left', userId => {
       console.log(`User ${userId} left`);
@@ -96,17 +98,76 @@
       }
       removeVideoElement(userId);
     });
-
-    // Handle participant list update
+  
+    // Handle incoming streams (remote video)
+    socket.on('remote-stream', (userId, stream) => {
+      console.log(`Received stream from ${userId}`);
+      addVideoElement(userId, stream); // Add remote stream
+      createPeer(userId, false); // Ensure peer connection for signaling
+    });
+  
+    // Handle signaling data
+    socket.on('signal', async ({ from, signal }) => {
+      if (!peerConnections[from]) createPeer(from, false);
+      await peerConnections[from].setRemoteDescription(new RTCSessionDescription(signal));
+  
+      if (signal.type === 'offer') {
+        const answer = await peerConnections[from].createAnswer();
+        await peerConnections[from].setLocalDescription(answer);
+        socket.emit('signal', { to: from, signal: peerConnections[from].localDescription });
+      }
+    });
+  
+    // Add video element to the page
+    function addVideoElement(userId, stream) {
+      const video = document.createElement('video');
+      video.id = `video-${userId}`;
+      video.srcObject = stream;
+      video.autoplay = true;
+      video.playsInline = true;
+      videoContainer.appendChild(video);
+    }
+  
+    // Remove video element when a user leaves
+    function removeVideoElement(userId) {
+      const video = document.getElementById(`video-${userId}`);
+      if (video) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.remove();
+      }
+    }
+  
+    // Create a new peer connection
+    function createPeer(userId, isInitiator) {
+      const peerConnection = new RTCPeerConnection(config);
+      peerConnections[userId] = peerConnection;
+  
+      // Add tracks from the local stream to the peer connection
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+  
+      peerConnection.ontrack = ({ streams: [stream] }) => {
+        addVideoElement(userId, stream); // Add new video for the incoming user
+      };
+  
+      peerConnection.onicecandidate = e => {
+        if (e.candidate) return;
+        socket.emit('signal', { to: userId, signal: peerConnection.localDescription });
+      };
+  
+      if (isInitiator) {
+        peerConnection.createOffer()
+          .then(offer => peerConnection.setLocalDescription(offer))
+          .then(() => {
+            socket.emit('signal', { to: userId, signal: peerConnection.localDescription });
+          });
+      }
+    }
+  
+    // Handle incoming participant list and update UI
     socket.on('update-participant-list', participants => {
       updateParticipantList(participants);
     });
-
-    // Handle initial participant list when joining
-    socket.on('participant-list', participants => {
-      updateParticipantList(participants);
-    });
-
+  
     // Update the displayed participant list
     function updateParticipantList(participants) {
       participantsDiv.innerHTML = '';
@@ -117,59 +178,7 @@
         participantsDiv.appendChild(participantElement);
       });
     }
-
-    // Add video element to the page
-    function addVideoElement(userId, stream) {
-      const video = document.createElement('video');
-      video.id = `video-${userId}`;
-      video.srcObject = stream;
-      video.autoplay = true;
-      video.playsInline = true;
-      videoContainer.appendChild(video);
-    }
-
-    // Remove video element when a user leaves
-    function removeVideoElement(userId) {
-      const video = document.getElementById(`video-${userId}`);
-      if (video) {
-        video.srcObject.getTracks().forEach(track => track.stop());
-        video.remove();
-      }
-    }
-
-    // Create a new peer connection
-    function createPeer(userId, isInitiator) {
-      const peerConnection = new RTCPeerConnection(config);
-      peerConnections[userId] = peerConnection;
-
-      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-      peerConnection.ontrack = ({ streams: [stream] }) => {
-        addVideoElement(userId, stream); // Add new video for the incoming user
-      };
-
-      peerConnection.onicecandidate = e => {
-        if (e.candidate) return;
-        socket.emit('signal', { to: userId, signal: peerConnection.localDescription });
-      };
-
-      if (isInitiator) {
-        peerConnection.createOffer()
-          .then(offer => peerConnection.setLocalDescription(offer));
-      }
-    }
-
-    // Handle signaling data
-    socket.on('signal', async ({ from, signal }) => {
-      if (!peerConnections[from]) createPeer(from, false);
-      await peerConnections[from].setRemoteDescription(new RTCSessionDescription(signal));
-
-      if (signal.type === 'offer') {
-        const answer = await peerConnections[from].createAnswer();
-        await peerConnections[from].setLocalDescription(answer);
-        socket.emit('signal', { to: from, signal: peerConnections[from].localDescription });
-      }
-    });
   </script>
+  
 </body>
 </html>

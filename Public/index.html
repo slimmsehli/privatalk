@@ -5,28 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WebRTC Meeting</title>
   <style>
-    video {
-      width: 100%;
-      max-width: 200px;
-      margin: 5px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-    }
-    #videoContainer {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
     body {
       font-family: sans-serif;
       text-align: center;
     }
+
+    #videoContainer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px; /* Adds space between video elements */
+      padding: 20px;
+    }
+
+    video {
+      width: 300px;
+      height: 200px;
+      margin: 5px;
+      border: 2px solid #ccc;
+      border-radius: 10px;
+    }
+
     #participants {
       margin-top: 20px;
     }
+
     .participant {
       margin: 5px;
       font-size: 1.2em;
+    }
+
+    /* Ensure the container takes full height for vertical alignment */
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
     }
   </style>
 </head>

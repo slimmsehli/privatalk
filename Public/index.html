@@ -5,16 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WebRTC Meeting</title>
   <style>
-    video { width: 45%; margin: 5px; border: 1px solid #ccc; }
-    body { font-family: sans-serif; text-align: center; }
-    #participants { margin-top: 20px; }
-    .participant { margin: 5px; font-size: 1.2em; }
+    video {
+      width: 100%;
+      max-width: 200px;
+      margin: 5px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    #videoContainer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    body {
+      font-family: sans-serif;
+      text-align: center;
+    }
+    #participants {
+      margin-top: 20px;
+    }
+    .participant {
+      margin: 5px;
+      font-size: 1.2em;
+    }
   </style>
 </head>
 <body>
   <h1>WebRTC Video Chat</h1>
-  <video id="localVideo" autoplay muted playsinline></video>
-  <video id="remoteVideo" autoplay playsinline></video>
+
+  <div id="videoContainer">
+    <!-- Video elements will be added dynamically here -->
+  </div>
 
   <h3>Participants:</h3>
   <div id="participants"></div>
@@ -23,12 +44,11 @@
   <script>
     const socket = io();
     const roomID = location.pathname.split('/')[2] || 'default';
-    const localVideo = document.getElementById('localVideo');
-    const remoteVideo = document.getElementById('remoteVideo');
+    const videoContainer = document.getElementById('videoContainer');
     const participantsDiv = document.getElementById('participants');
 
     let localStream;
-    let peerConnection;
+    let peerConnections = {}; // Store peer connections for all participants
     const config = {
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     };
@@ -39,8 +59,8 @@
     // Handle local media stream
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
-        localVideo.srcObject = stream;
         localStream = stream;
+        addVideoElement('local', stream);  // Add local video element
       });
 
     // Handle new participant joining
@@ -52,14 +72,11 @@
     // Handle new participant leaving
     socket.on('user-left', userId => {
       console.log(`User ${userId} left`);
-      if (remoteVideo.srcObject) {
-        remoteVideo.srcObject.getTracks().forEach(t => t.stop());
-        remoteVideo.srcObject = null;
+      if (peerConnections[userId]) {
+        peerConnections[userId].close();
+        delete peerConnections[userId];
       }
-      if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-      }
+      removeVideoElement(userId);
     });
 
     // Handle participant list update
@@ -83,14 +100,34 @@
       });
     }
 
+    // Add video element to the page
+    function addVideoElement(userId, stream) {
+      const video = document.createElement('video');
+      video.id = `video-${userId}`;
+      video.srcObject = stream;
+      video.autoplay = true;
+      video.playsInline = true;
+      videoContainer.appendChild(video);
+    }
+
+    // Remove video element when a user leaves
+    function removeVideoElement(userId) {
+      const video = document.getElementById(`video-${userId}`);
+      if (video) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.remove();
+      }
+    }
+
     // Create a new peer connection
     function createPeer(userId, isInitiator) {
-      peerConnection = new RTCPeerConnection(config);
+      const peerConnection = new RTCPeerConnection(config);
+      peerConnections[userId] = peerConnection;
 
       localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
       peerConnection.ontrack = ({ streams: [stream] }) => {
-        remoteVideo.srcObject = stream;
+        addVideoElement(userId, stream); // Add new video for the incoming user
       };
 
       peerConnection.onicecandidate = e => {
@@ -106,13 +143,13 @@
 
     // Handle signaling data
     socket.on('signal', async ({ from, signal }) => {
-      if (!peerConnection) createPeer(from, false);
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
+      if (!peerConnections[from]) createPeer(from, false);
+      await peerConnections[from].setRemoteDescription(new RTCSessionDescription(signal));
 
       if (signal.type === 'offer') {
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        socket.emit('signal', { to: from, signal: peerConnection.localDescription });
+        const answer = await peerConnections[from].createAnswer();
+        await peerConnections[from].setLocalDescription(answer);
+        socket.emit('signal', { to: from, signal: peerConnections[from].localDescription });
       }
     });
   </script>

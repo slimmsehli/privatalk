@@ -7,6 +7,8 @@
   <style>
     video { width: 45%; margin: 5px; border: 1px solid #ccc; }
     body { font-family: sans-serif; text-align: center; }
+    #participants { margin-top: 20px; }
+    .participant { margin: 5px; font-size: 1.2em; }
   </style>
 </head>
 <body>
@@ -14,42 +16,74 @@
   <video id="localVideo" autoplay muted playsinline></video>
   <video id="remoteVideo" autoplay playsinline></video>
 
+  <h3>Participants:</h3>
+  <div id="participants"></div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
     const roomID = location.pathname.split('/')[2] || 'default';
-
     const localVideo = document.getElementById('localVideo');
     const remoteVideo = document.getElementById('remoteVideo');
+    const participantsDiv = document.getElementById('participants');
+
     let localStream;
     let peerConnection;
     const config = {
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     };
 
+    // When joining a room
     socket.emit('join', roomID);
 
+    // Handle local media stream
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
         localVideo.srcObject = stream;
         localStream = stream;
       });
 
+    // Handle new participant joining
     socket.on('user-joined', userId => {
+      console.log(`User ${userId} joined`);
       createPeer(userId, true);
     });
 
-    socket.on('signal', async ({ from, signal }) => {
-      if (!peerConnection) createPeer(from, false);
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
-
-      if (signal.type === 'offer') {
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        socket.emit('signal', { to: from, signal: peerConnection.localDescription });
+    // Handle new participant leaving
+    socket.on('user-left', userId => {
+      console.log(`User ${userId} left`);
+      if (remoteVideo.srcObject) {
+        remoteVideo.srcObject.getTracks().forEach(t => t.stop());
+        remoteVideo.srcObject = null;
+      }
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
       }
     });
 
+    // Handle participant list update
+    socket.on('update-participant-list', participants => {
+      updateParticipantList(participants);
+    });
+
+    // Handle initial participant list when joining
+    socket.on('participant-list', participants => {
+      updateParticipantList(participants);
+    });
+
+    // Update the displayed participant list
+    function updateParticipantList(participants) {
+      participantsDiv.innerHTML = '';
+      participants.forEach(participant => {
+        const participantElement = document.createElement('div');
+        participantElement.classList.add('participant');
+        participantElement.textContent = participant;
+        participantsDiv.appendChild(participantElement);
+      });
+    }
+
+    // Create a new peer connection
     function createPeer(userId, isInitiator) {
       peerConnection = new RTCPeerConnection(config);
 
@@ -70,14 +104,15 @@
       }
     }
 
-    socket.on('user-left', () => {
-      if (remoteVideo.srcObject) {
-        remoteVideo.srcObject.getTracks().forEach(t => t.stop());
-        remoteVideo.srcObject = null;
-      }
-      if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
+    // Handle signaling data
+    socket.on('signal', async ({ from, signal }) => {
+      if (!peerConnection) createPeer(from, false);
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
+
+      if (signal.type === 'offer') {
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit('signal', { to: from, signal: peerConnection.localDescription });
       }
     });
   </script>
